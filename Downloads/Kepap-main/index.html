@@ -187,6 +187,30 @@ a{color:var(--accent);text-decoration:none}
   </div>
 </div>
 
+<!-- ── Upload Modal ── -->
+<div class="modal-overlay" id="uploadOverlay">
+  <div class="modal" style="max-width:500px">
+    <button class="modal-close" onclick="closeUploadModal()">
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="6" y1="6" x2="18" y2="18"/><line x1="18" y1="6" x2="6" y2="18"/></svg>
+    </button>
+    <div style="padding:24px">
+      <h2 style="margin-bottom:16px">Datei hochladen</h2>
+      <label style="font-size:.85rem;font-weight:600;display:block;margin-bottom:4px">GitHub Token</label>
+      <input type="password" id="uploadToken" placeholder="ghp_..." style="width:100%;padding:7px 12px;border:1px solid var(--border);border-radius:var(--radius);margin-bottom:12px">
+      <label style="font-size:.85rem;font-weight:600;display:block;margin-bottom:4px">Branch</label>
+      <input type="text" id="uploadBranch" value="main" style="width:100%;padding:7px 12px;border:1px solid var(--border);border-radius:var(--radius);margin-bottom:12px">
+      <label style="font-size:.85rem;font-weight:600;display:block;margin-bottom:4px">Kategorie</label>
+      <select id="uploadKat" style="width:100%;padding:7px 12px;border:1px solid var(--border);border-radius:var(--radius);margin-bottom:12px;background:var(--surface)"></select>
+      <label style="font-size:.85rem;font-weight:600;display:block;margin-bottom:4px">Dateien</label>
+      <input type="file" id="uploadFiles" multiple style="margin-bottom:16px">
+      <div style="display:flex;gap:8px;align-items:center">
+        <button onclick="uploadFiles()" style="padding:8px 20px;background:var(--accent);color:#fff;border-radius:var(--radius);font-weight:600">Hochladen</button>
+        <span class="status" id="uploadStatus"></span>
+      </div>
+    </div>
+  </div>
+</div>
+
 <script>
 /* ================================================================
    kepap – Medienverwaltung  (Client-Side, GitHub-backed)
@@ -283,7 +307,9 @@ modalOverlay.addEventListener('click', e => { if (e.target === modalOverlay) clo
 document.addEventListener('keydown', e => { if (e.key === 'Escape') closeModal(); });
 function closeModal() { modalOverlay.classList.remove('open'); modalPreview.innerHTML = ''; modalInfo.innerHTML = ''; }
 
+let currentModalFile = null;
 function openModal(file) {
+  currentModalFile = file;
   let preview = '';
   if (file.type === 'image') {
     preview = `<img src="${file.rawUrl}" alt="${file.name}" loading="lazy">`;
@@ -312,10 +338,12 @@ function openModal(file) {
     <div class="meta-row" style="margin-top:6px">
       <span><strong>Pfad:</strong> ${esc(file.path)}</span>
     </div>
-    <div style="margin-top:12px">
+    <div style="margin-top:12px;display:flex;gap:12px;align-items:center">
       <a href="${file.rawUrl}" target="_blank" rel="noopener" style="font-size:.85rem">↗ Datei öffnen (raw)</a>
+      <button id="deleteBtn" style="font-size:.82rem;color:#dc2626;background:none;border:1px solid #dc2626;padding:3px 10px;border-radius:var(--radius);cursor:pointer">Löschen</button>
     </div>`;
   modalOverlay.classList.add('open');
+  document.getElementById('deleteBtn')?.addEventListener('click', () => deleteFile(currentModalFile));
 }
 
 // ── Repo laden ──
@@ -515,78 +543,107 @@ function fmtSize(bytes) {
   return (bytes / 1048576).toFixed(1) + ' MB';
 }
 
-// ── ERD-konforme In-Memory-Datenstruktur (Referenz) ──
-const DB = {
-  kategorie:       KATEGORIEN.map((k, i) => ({ kategorie_id: i + 1, kat_name: k })),
-  rollen:          [{rolle_id:1,rolle_name:'Admin'},{rolle_id:2,rolle_name:'Editor'},{rolle_id:3,rolle_name:'Viewer'},{rolle_id:4,rolle_name:'Uploader'}],
-  mitglieder:      [], // {mitglied_id, vor_name, nach_name, email}
-  user:            [], // {user_id, mitglied_id, user_name, passwort, created_at}
-  user_rollen:     [], // {user_id, rolle_id}
-  team:            [], // {team_id, team_name}
-  team_mitglieder: [], // {team_id, mitglied_id}
-  videos:          [], // {vid_id, user_id, kategorie_id, titel, beschreibung, laufzeit, views, hochgeladen_am}
-  bilder:          [], // {bild_id, vid_id, kategorie_id, dateipfad, beschreibung, laufzeit, hochgeladen_am}
-  audio:           []  // {audio_id, vid_id, dateipfad, beschreibung, hochgeladen_am}
-};
+// ── Upload-Funktion (GitHub API) ──
+let ghToken = localStorage.getItem('kepap_gh_token') || '';
 
-// ── Eingebettete Testdaten ──
-const TEST_FILES = [
-  {path:'IFZK-2524-017-ABU/zusammenfassung.md',       name:'zusammenfassung.md',       size:120, kategorie:'IFZK-2524-017-ABU',        type:'text'},
-  {path:'IFZK-2524-017-ABU/notizen.txt',              name:'notizen.txt',              size:68,  kategorie:'IFZK-2524-017-ABU',        type:'text'},
-  {path:'IFZK-2524-017-ABU/logo-abu.svg',             name:'logo-abu.svg',             size:540, kategorie:'IFZK-2524-017-ABU',        type:'image'},
-  {path:'IFZK-2524-017-ABU/praesentation-cover.png',  name:'praesentation-cover.png',  size:4200,kategorie:'IFZK-2524-017-ABU',        type:'image'},
-  {path:'IFZK-2524-017-ABU/whiteboard-foto.jpg',      name:'whiteboard-foto.jpg',      size:8500,kategorie:'IFZK-2524-017-ABU',        type:'image'},
-  {path:'IFZK-2524-017-S2-UEK-106/aufgaben.json',     name:'aufgaben.json',            size:95,  kategorie:'IFZK-2524-017-S2-UEK-106', type:'text'},
-  {path:'IFZK-2524-017-S2-UEK-106/sql-cheatsheet.md', name:'sql-cheatsheet.md',        size:180, kategorie:'IFZK-2524-017-S2-UEK-106', type:'text'},
-  {path:'IFZK-2524-017-S2-UEK-106/erd-diagram.svg',   name:'erd-diagram.svg',          size:1100,kategorie:'IFZK-2524-017-S2-UEK-106', type:'image'},
-  {path:'IFZK-2524-017-S2-UEK-106/db-schema-screenshot.png', name:'db-schema-screenshot.png', size:5800, kategorie:'IFZK-2524-017-S2-UEK-106', type:'image'},
-  {path:'IFZK-2524-017-S2-UEK-106/klassendiagramm.jpg',name:'klassendiagramm.jpg',     size:6200,kategorie:'IFZK-2524-017-S2-UEK-106', type:'image'},
-  {path:'IFZK-2524-017-S2-MAT/formeln.csv',           name:'formeln.csv',              size:145, kategorie:'IFZK-2524-017-S2-MAT',     type:'text'},
-  {path:'IFZK-2524-017-S2-MAT/pruefungsstoff.md',     name:'pruefungsstoff.md',        size:65,  kategorie:'IFZK-2524-017-S2-MAT',     type:'text'},
-  {path:'IFZK-2524-017-S2-MAT/graph-parabel.png',     name:'graph-parabel.png',        size:3800,kategorie:'IFZK-2524-017-S2-MAT',     type:'image'},
-  {path:'IFZK-2524-017-S2-MAT/tafel-foto.jpg',        name:'tafel-foto.jpg',           size:7200,kategorie:'IFZK-2524-017-S2-MAT',     type:'image'},
-  {path:'IFZK-2524-017-S1-114/protokoll.txt',         name:'protokoll.txt',            size:72,  kategorie:'IFZK-2524-017-S1-114',     type:'text'},
-  {path:'IFZK-2524-017-S1-114/netzwerk-config.json',  name:'netzwerk-config.json',     size:82,  kategorie:'IFZK-2524-017-S1-114',     type:'text'},
-  {path:'IFZK-2524-017-S1-114/netzwerk-topologie.svg',name:'netzwerk-topologie.svg',   size:1350,kategorie:'IFZK-2524-017-S1-114',     type:'image'},
-  {path:'IFZK-2524-017-S1-114/ip-tabelle.png',        name:'ip-tabelle.png',           size:4100,kategorie:'IFZK-2524-017-S1-114',     type:'image'},
-  {path:'IFZK-2524-017-S1-114/rack-foto.jpg',         name:'rack-foto.jpg',            size:9100,kategorie:'IFZK-2524-017-S1-114',     type:'image'},
-  {path:'IFZK-2524-017-S1-OFF/stundenplan.md',        name:'stundenplan.md',           size:190, kategorie:'IFZK-2524-017-S1-OFF',     type:'text'},
-  {path:'IFZK-2524-017-S1-OFF/inventar.csv',          name:'inventar.csv',             size:105, kategorie:'IFZK-2524-017-S1-OFF',     type:'text'},
-  {path:'IFZK-2524-017-S1-OFF/organigramm.png',       name:'organigramm.png',          size:4600,kategorie:'IFZK-2524-017-S1-OFF',     type:'image'},
-  {path:'IFZK-2524-017-S1-OFF/team-foto.jpg',         name:'team-foto.jpg',            size:7800,kategorie:'IFZK-2524-017-S1-OFF',     type:'image'},
-];
-
-function loadTestData() {
-  const base = repoOwner && repoName
-    ? `https://raw.githubusercontent.com/${repoOwner}/${repoName}/HEAD/`
-    : '';
-  allFiles = TEST_FILES.map(f => ({
-    ...f,
-    rawUrl: base ? base + encodeURIComponent(f.path).replace(/%2F/g,'/') : '#'
-  }));
-  repoStatus.textContent = `Demo: ${allFiles.length} Testdateien geladen`;
-  repoStatus.classList.remove('err');
-  buildSidebar();
-  render();
+function showUploadModal() {
+  if (!repoOwner || !repoName) { alert('Bitte zuerst ein Repository laden.'); return; }
+  const overlay = document.getElementById('uploadOverlay');
+  overlay.classList.add('open');
+  document.getElementById('uploadKat').innerHTML = KATEGORIEN.map(k => `<option value="${k}">${displayName(k)}</option>`).join('');
+  document.getElementById('uploadToken').value = ghToken;
+  document.getElementById('uploadStatus').textContent = '';
+  document.getElementById('uploadFiles').value = '';
 }
 
-// Demo-Button
-const demoBtn = document.createElement('button');
-demoBtn.textContent = 'Demo-Daten';
-demoBtn.style.cssText = 'padding:7px 14px;background:#16a34a;color:#fff;border-radius:var(--radius);font-weight:600;font-size:.88rem';
-demoBtn.addEventListener('click', loadTestData);
-document.querySelector('.repo-bar').appendChild(demoBtn);
+function closeUploadModal() {
+  document.getElementById('uploadOverlay').classList.remove('open');
+}
+
+async function uploadFiles() {
+  const token = document.getElementById('uploadToken').value.trim();
+  const kat = document.getElementById('uploadKat').value;
+  const files = document.getElementById('uploadFiles').files;
+  const status = document.getElementById('uploadStatus');
+  const branch = document.getElementById('uploadBranch').value.trim() || 'main';
+
+  if (!token) { status.textContent = 'Bitte GitHub Token eingeben.'; status.className = 'status err'; return; }
+  if (!files.length) { status.textContent = 'Bitte Dateien auswählen.'; status.className = 'status err'; return; }
+
+  ghToken = token;
+  localStorage.setItem('kepap_gh_token', token);
+
+  status.textContent = `Lade ${files.length} Datei(en) hoch…`;
+  status.className = 'status';
+
+  let success = 0;
+  for (const file of files) {
+    const path = `Downloads/Kepap-main/${kat}/${file.name}`;
+    try {
+      const arrayBuf = await file.arrayBuffer();
+      const base64 = btoa(String.fromCharCode(...new Uint8Array(arrayBuf)));
+      const res = await fetch(`https://api.github.com/repos/${repoOwner}/${repoName}/contents/${path}`, {
+        method: 'PUT',
+        headers: { 'Authorization': `token ${token}`, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ message: `Datei hinzufügen: ${file.name} → ${displayName(kat)}`, content: base64, branch: branch })
+      });
+      if (!res.ok) { const err = await res.json(); throw new Error(err.message || `HTTP ${res.status}`); }
+      success++;
+      status.textContent = `${success}/${files.length} hochgeladen…`;
+    } catch (err) {
+      status.textContent = `Fehler bei ${file.name}: ${err.message}`;
+      status.className = 'status err';
+      return;
+    }
+  }
+
+  status.textContent = `${success} Datei(en) erfolgreich hochgeladen!`;
+  status.className = 'status';
+  setTimeout(() => { closeUploadModal(); loadRepo(); }, 1500);
+}
+
+// ── Delete-Funktion (GitHub API) ──
+async function deleteFile(file) {
+  if (!ghToken) { alert('Bitte zuerst einen GitHub Token im Upload-Dialog eingeben.'); return; }
+  if (!confirm(`Datei "${file.name}" wirklich löschen?`)) return;
+  const branch = document.getElementById('uploadBranch')?.value.trim() || 'main';
+
+  try {
+    // SHA holen
+    const metaRes = await fetch(`https://api.github.com/repos/${repoOwner}/${repoName}/contents/${file.path}`, {
+      headers: { 'Authorization': `token ${ghToken}` }
+    });
+    if (!metaRes.ok) throw new Error(`HTTP ${metaRes.status}`);
+    const meta = await metaRes.json();
+
+    const res = await fetch(`https://api.github.com/repos/${repoOwner}/${repoName}/contents/${file.path}`, {
+      method: 'DELETE',
+      headers: { 'Authorization': `token ${ghToken}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ message: `Datei löschen: ${file.name}`, sha: meta.sha, branch: branch })
+    });
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    closeModal();
+    loadRepo();
+  } catch (err) {
+    alert('Fehler beim Löschen: ' + err.message);
+  }
+}
+
+// Upload-Button in Toolbar
+const uploadBtn = document.createElement('button');
+uploadBtn.textContent = '+ Datei hochladen';
+uploadBtn.style.cssText = 'padding:7px 14px;background:var(--accent);color:#fff;border-radius:var(--radius);font-weight:600;font-size:.88rem;white-space:nowrap';
+uploadBtn.addEventListener('click', showUploadModal);
+document.querySelector('.toolbar').appendChild(uploadBtn);
 
 // ── Init ──
 buildSidebar();
-content.innerHTML = '<div class="state-msg"><div class="icon">🔗</div><p>Gib oben eine GitHub-Repo-URL ein und klicke «Laden», oder nutze «Demo-Daten» zum Testen.</p></div>';
+content.innerHTML = '<div class="state-msg"><div class="icon">🔗</div><p>Gib oben eine GitHub-Repo-URL ein und klicke «Laden».</p></div>';
 
-// Auto-load: try GitHub, fall back to test data
+// Auto-load
 (async () => {
   if (repoInput.value.trim()) {
-    try { await loadRepo(); }
-    catch(e) { /* ignore */ }
-    if (allFiles.length === 0) loadTestData();
+    try { await loadRepo(); } catch(e) { /* ignore */ }
   }
 })();
 </script>
