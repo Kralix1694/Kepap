@@ -1,0 +1,594 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>kepap – Medienverwaltung</title>
+<style>
+/* ── Reset & Base ── */
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+:root{
+  --bg:#fafafa;--surface:#fff;--border:#e2e2e2;
+  --text:#1a1a1a;--text2:#666;--text3:#999;
+  --accent:#2563eb;--accent-light:#eff6ff;
+  --radius:6px;--shadow:0 1px 3px rgba(0,0,0,.08);
+  --topbar-h:52px;--sidebar-w:280px;
+  --badge-video:#e0f2fe;--badge-video-t:#0369a1;
+  --badge-image:#fef3c7;--badge-image-t:#92400e;
+  --badge-audio:#ede9fe;--badge-audio-t:#6d28d9;
+  --badge-text:#ecfdf5;--badge-text-t:#065f46;
+}
+html{font-size:14px}
+body{font-family:'Segoe UI',system-ui,-apple-system,sans-serif;background:var(--bg);color:var(--text);line-height:1.5;overflow-x:hidden}
+button{font:inherit;cursor:pointer;border:none;background:none;color:inherit}
+input{font:inherit}
+a{color:var(--accent);text-decoration:none}
+
+/* ── Topbar ── */
+.topbar{position:fixed;top:0;left:0;right:0;height:var(--topbar-h);background:var(--surface);border-bottom:1px solid var(--border);display:flex;align-items:center;padding:0 16px;z-index:100;gap:12px}
+.topbar-burger{width:36px;height:36px;display:flex;flex-direction:column;justify-content:center;align-items:center;gap:4px;border-radius:var(--radius);transition:background .15s}
+.topbar-burger:hover{background:var(--accent-light)}
+.topbar-burger span{display:block;width:18px;height:2px;background:var(--text);border-radius:1px}
+.topbar-logo{font-weight:700;font-size:1.15rem;letter-spacing:-.5px}
+.topbar-logo em{font-style:normal;color:var(--accent)}
+.topbar-spacer{flex:1}
+.topbar-filter{font-size:.8rem;color:var(--text2);background:var(--accent-light);padding:3px 10px;border-radius:12px;white-space:nowrap;max-width:200px;overflow:hidden;text-overflow:ellipsis}
+.topbar-filter:empty{display:none}
+
+/* ── Sidebar / Overlay ── */
+.overlay{position:fixed;inset:0;background:rgba(0,0,0,.25);z-index:200;opacity:0;pointer-events:none;transition:opacity .2s}
+.overlay.open{opacity:1;pointer-events:auto}
+.sidebar{position:fixed;top:0;bottom:0;left:0;width:var(--sidebar-w);background:var(--surface);border-right:1px solid var(--border);z-index:201;transform:translateX(-100%);transition:transform .25s ease;overflow-y:auto;padding:16px 0}
+.sidebar.open{transform:translateX(0)}
+.sidebar h3{font-size:.7rem;text-transform:uppercase;letter-spacing:.08em;color:var(--text3);padding:16px 20px 6px;font-weight:600}
+.sidebar h3:first-child{padding-top:10px}
+.sb-item{display:flex;align-items:center;padding:7px 20px;cursor:pointer;transition:background .12s;font-size:.92rem;gap:8px}
+.sb-item:hover{background:var(--accent-light)}
+.sb-item.active{background:var(--accent-light);color:var(--accent);font-weight:600}
+.sb-item .cnt{margin-left:auto;font-size:.75rem;color:var(--text3);min-width:20px;text-align:right}
+.sb-item.active .cnt{color:var(--accent)}
+
+/* ── Main ── */
+.main{margin-top:var(--topbar-h);padding:20px 24px 40px}
+.toolbar{display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:14px}
+.search-box{flex:1;min-width:180px;max-width:400px;position:relative}
+.search-box input{width:100%;padding:7px 12px 7px 34px;border:1px solid var(--border);border-radius:var(--radius);background:var(--surface);outline:none;transition:border .15s}
+.search-box input:focus{border-color:var(--accent)}
+.search-box svg{position:absolute;left:10px;top:50%;transform:translateY(-50%);color:var(--text3)}
+.view-toggle{display:flex;border:1px solid var(--border);border-radius:var(--radius);overflow:hidden}
+.view-toggle button{padding:6px 10px;background:var(--surface);transition:background .12s,color .12s}
+.view-toggle button:not(:last-child){border-right:1px solid var(--border)}
+.view-toggle button.active{background:var(--accent);color:#fff}
+.view-toggle button svg{display:block}
+.breadcrumb{font-size:.82rem;color:var(--text2);margin-bottom:16px}
+.breadcrumb strong{color:var(--text);font-weight:600}
+
+/* ── Grid View ── */
+.grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:14px}
+.card{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);overflow:hidden;cursor:pointer;transition:box-shadow .15s,transform .15s}
+.card:hover{box-shadow:0 4px 12px rgba(0,0,0,.1);transform:translateY(-2px)}
+.card-preview{height:140px;background:#f0f0f0;display:flex;align-items:center;justify-content:center;position:relative;overflow:hidden}
+.card-preview img{width:100%;height:100%;object-fit:cover}
+.card-preview .icon-placeholder{font-size:2.4rem;color:var(--text3)}
+.card-badge{position:absolute;top:8px;right:8px;font-size:.65rem;font-weight:600;padding:2px 8px;border-radius:10px;text-transform:uppercase;letter-spacing:.04em}
+.badge-video{background:var(--badge-video);color:var(--badge-video-t)}
+.badge-image{background:var(--badge-image);color:var(--badge-image-t)}
+.badge-audio{background:var(--badge-audio);color:var(--badge-audio-t)}
+.badge-text{background:var(--badge-text);color:var(--badge-text-t)}
+.card-body{padding:10px 12px}
+.card-name{font-size:.85rem;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.card-meta{font-size:.75rem;color:var(--text2);margin-top:3px;display:flex;justify-content:space-between}
+
+/* ── List View ── */
+.list-table{width:100%;border-collapse:collapse;font-size:.88rem}
+.list-table th{text-align:left;font-weight:600;font-size:.75rem;text-transform:uppercase;letter-spacing:.05em;color:var(--text3);padding:8px 12px;border-bottom:2px solid var(--border)}
+.list-table td{padding:9px 12px;border-bottom:1px solid var(--border);vertical-align:middle}
+.list-table tbody tr{cursor:pointer;transition:background .1s}
+.list-table tbody tr:hover{background:var(--accent-light)}
+.list-table .type-badge{display:inline-block;font-size:.65rem;font-weight:600;padding:2px 7px;border-radius:10px;text-transform:uppercase}
+.fname{max-width:300px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+
+/* ── Modal ── */
+.modal-overlay{position:fixed;inset:0;background:rgba(0,0,0,.55);z-index:300;display:none;align-items:center;justify-content:center;padding:24px}
+.modal-overlay.open{display:flex}
+.modal{background:var(--surface);border-radius:10px;max-width:820px;width:100%;max-height:90vh;overflow:auto;box-shadow:0 20px 60px rgba(0,0,0,.25);position:relative}
+.modal-close{position:absolute;top:12px;right:12px;width:32px;height:32px;border-radius:50%;background:rgba(0,0,0,.06);display:flex;align-items:center;justify-content:center;z-index:2;transition:background .15s}
+.modal-close:hover{background:rgba(0,0,0,.12)}
+.modal-preview{background:#111;display:flex;align-items:center;justify-content:center;min-height:200px;max-height:55vh;overflow:hidden;border-radius:10px 10px 0 0}
+.modal-preview img{max-width:100%;max-height:55vh;object-fit:contain}
+.modal-preview video,.modal-preview audio{max-width:100%;outline:none}
+.modal-preview pre{color:#ddd;padding:24px;font-size:.85rem;max-height:55vh;overflow:auto;width:100%;white-space:pre-wrap;word-break:break-word}
+.modal-info{padding:20px 24px}
+.modal-info h2{font-size:1.1rem;margin-bottom:6px}
+.modal-info .meta-row{font-size:.82rem;color:var(--text2);display:flex;gap:16px;flex-wrap:wrap;margin-bottom:4px}
+.modal-info .meta-row span{display:flex;align-items:center;gap:4px}
+
+/* ── Loading / Empty ── */
+.state-msg{text-align:center;padding:60px 20px;color:var(--text3)}
+.state-msg .icon{font-size:2.5rem;margin-bottom:10px}
+.state-msg p{font-size:.95rem}
+.spinner{width:28px;height:28px;border:3px solid var(--border);border-top-color:var(--accent);border-radius:50%;animation:spin .7s linear infinite;margin:0 auto 14px}
+@keyframes spin{to{transform:rotate(360deg)}}
+
+/* ── Repo Input Bar ── */
+.repo-bar{display:flex;gap:8px;margin-bottom:18px;align-items:center;flex-wrap:wrap}
+.repo-bar input{flex:1;min-width:200px;padding:7px 12px;border:1px solid var(--border);border-radius:var(--radius);background:var(--surface);outline:none}
+.repo-bar input:focus{border-color:var(--accent)}
+.repo-bar button{padding:7px 18px;background:var(--accent);color:#fff;border-radius:var(--radius);font-weight:600;font-size:.88rem;transition:opacity .15s}
+.repo-bar button:hover{opacity:.88}
+.repo-bar .status{font-size:.78rem;color:var(--text2)}
+.repo-bar .status.err{color:#dc2626}
+
+/* ── Responsive ── */
+@media(max-width:600px){
+  .grid{grid-template-columns:repeat(auto-fill,minmax(160px,1fr));gap:10px}
+  .card-preview{height:110px}
+  .main{padding:16px 12px 30px}
+  .toolbar{gap:8px}
+}
+</style>
+</head>
+<body>
+
+<!-- ── Topbar ── -->
+<header class="topbar">
+  <button class="topbar-burger" id="burgerBtn" aria-label="Menü öffnen">
+    <span></span><span></span><span></span>
+  </button>
+  <div class="topbar-logo"><em>ke</em>pap</div>
+  <div class="topbar-spacer"></div>
+  <div class="topbar-filter" id="topFilter"></div>
+</header>
+
+<!-- ── Sidebar ── -->
+<div class="overlay" id="overlay"></div>
+<nav class="sidebar" id="sidebar">
+  <h3>Typ</h3>
+  <div id="sbTypes"></div>
+  <h3>Klassen</h3>
+  <div id="sbKlassen"></div>
+</nav>
+
+<!-- ── Main ── -->
+<main class="main">
+  <div class="repo-bar">
+    <input type="text" id="repoInput" placeholder="GitHub-Repo-URL  z. B. https://github.com/Kralix1694/Kepap.git" value="https://github.com/Kralix1694/Kepap.git">
+    <button id="loadBtn">Laden</button>
+    <span class="status" id="repoStatus"></span>
+  </div>
+
+  <div class="toolbar">
+    <div class="search-box">
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="7"/><line x1="16.5" y1="16.5" x2="21" y2="21"/></svg>
+      <input type="text" id="searchInput" placeholder="Suche nach Dateiname oder Kategorie…">
+    </div>
+    <div class="view-toggle">
+      <button id="gridBtn" class="active" title="Rasteransicht">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/></svg>
+      </button>
+      <button id="listBtn" title="Listenansicht">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor"><rect x="3" y="4" width="18" height="2" rx="1"/><rect x="3" y="11" width="18" height="2" rx="1"/><rect x="3" y="18" width="18" height="2" rx="1"/></svg>
+      </button>
+    </div>
+  </div>
+
+  <div class="breadcrumb" id="breadcrumb"></div>
+  <div id="content"></div>
+</main>
+
+<!-- ── Modal ── -->
+<div class="modal-overlay" id="modalOverlay">
+  <div class="modal">
+    <button class="modal-close" id="modalClose">
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="6" y1="6" x2="18" y2="18"/><line x1="18" y1="6" x2="6" y2="18"/></svg>
+    </button>
+    <div class="modal-preview" id="modalPreview"></div>
+    <div class="modal-info" id="modalInfo"></div>
+  </div>
+</div>
+
+<script>
+/* ================================================================
+   kepap – Medienverwaltung  (Client-Side, GitHub-backed)
+   ================================================================ */
+
+// ── Kategorien ──
+const KATEGORIEN = [
+  'IFZK-2524-017-ABU',
+  'IFZK-2524-017-S2-UEK-106',
+  'IFZK-2524-017-S2-MAT',
+  'IFZK-2524-017-S2-254',
+  'IFZK-2524-017-S2-241',
+  'IFZK-2524-017-S2-346',
+  'IFZK-2524-017-S2-306',
+  'IFZK-2524-017-S2-245',
+  'IFZK-2524-017-S2-319',
+  'IFZK-2524-017-S1-ENG-N3',
+  'IFZK-2524-017-S1-114',
+  'IFZK-2524-017-S1-OFF',
+  'IFZK-2524-017-S1-231',
+  'IFZK-2524-017-S1-UEK-187',
+  'IFZK-2524-017-S1-431',
+  'IFZK-2524-017-S1-162',
+  'IFZK-2524-017-S1-164',
+  'IFZK-2524-017-S1-122',
+  'IFZK-2524-017-S1-117'
+];
+
+function displayName(kat) {
+  return kat.replace(/^IFZK-2524-017-/, '').replace(/^S[12]-/, '');
+}
+
+// ── Dateityp-Erkennung ──
+const EXT_MAP = {
+  video: ['mp4','mov','webm'],
+  image: ['jpg','jpeg','png','gif','webp','svg'],
+  audio: ['mp3','wav','ogg','aac'],
+  text:  ['txt','md','csv','json']
+};
+function mediaType(filename) {
+  const ext = filename.split('.').pop().toLowerCase();
+  for (const [type, exts] of Object.entries(EXT_MAP)) {
+    if (exts.includes(ext)) return type;
+  }
+  return null;
+}
+const SUPPORTED_EXTS = Object.values(EXT_MAP).flat();
+
+// ── State ──
+let allFiles = [];       // {path, name, size, kategorie, type, rawUrl}
+let filterType = 'all';  // 'all','video','image','audio','text'
+let filterKat = null;    // null = alle, sonst IFZK-String
+let viewMode = 'grid';   // 'grid' | 'list'
+let repoOwner = '';
+let repoName = '';
+
+// ── DOM refs ──
+const $ = id => document.getElementById(id);
+const burgerBtn   = $('burgerBtn');
+const overlay     = $('overlay');
+const sidebar     = $('sidebar');
+const topFilter   = $('topFilter');
+const sbTypes     = $('sbTypes');
+const sbKlassen   = $('sbKlassen');
+const searchInput = $('searchInput');
+const gridBtn     = $('gridBtn');
+const listBtn     = $('listBtn');
+const breadcrumb  = $('breadcrumb');
+const content     = $('content');
+const repoInput   = $('repoInput');
+const loadBtn     = $('loadBtn');
+const repoStatus  = $('repoStatus');
+const modalOverlay = $('modalOverlay');
+const modalPreview = $('modalPreview');
+const modalInfo    = $('modalInfo');
+const modalClose   = $('modalClose');
+
+// ── Sidebar toggle ──
+function openSidebar()  { sidebar.classList.add('open'); overlay.classList.add('open'); }
+function closeSidebar() { sidebar.classList.remove('open'); overlay.classList.remove('open'); }
+burgerBtn.addEventListener('click', () => sidebar.classList.contains('open') ? closeSidebar() : openSidebar());
+overlay.addEventListener('click', closeSidebar);
+
+// ── View toggle ──
+gridBtn.addEventListener('click', () => { viewMode='grid'; gridBtn.classList.add('active'); listBtn.classList.remove('active'); render(); });
+listBtn.addEventListener('click', () => { viewMode='list'; listBtn.classList.add('active'); gridBtn.classList.remove('active'); render(); });
+
+// ── Search ──
+searchInput.addEventListener('input', () => render());
+
+// ── Modal ──
+modalClose.addEventListener('click', closeModal);
+modalOverlay.addEventListener('click', e => { if (e.target === modalOverlay) closeModal(); });
+document.addEventListener('keydown', e => { if (e.key === 'Escape') closeModal(); });
+function closeModal() { modalOverlay.classList.remove('open'); modalPreview.innerHTML = ''; modalInfo.innerHTML = ''; }
+
+function openModal(file) {
+  let preview = '';
+  if (file.type === 'image') {
+    preview = `<img src="${file.rawUrl}" alt="${file.name}" loading="lazy">`;
+  } else if (file.type === 'video') {
+    preview = `<video src="${file.rawUrl}" controls autoplay></video>`;
+  } else if (file.type === 'audio') {
+    preview = `<div style="padding:40px;width:100%"><audio src="${file.rawUrl}" controls autoplay style="width:100%"></audio></div>`;
+  } else if (file.type === 'text') {
+    preview = `<pre id="textPreviewContent">Lade…</pre>`;
+    fetch(file.rawUrl).then(r => r.text()).then(t => {
+      const el = document.getElementById('textPreviewContent');
+      if (el) el.textContent = t.substring(0, 50000);
+    }).catch(() => {
+      const el = document.getElementById('textPreviewContent');
+      if (el) el.textContent = 'Fehler beim Laden.';
+    });
+  }
+  modalPreview.innerHTML = preview;
+  modalInfo.innerHTML = `
+    <h2>${esc(file.name)}</h2>
+    <div class="meta-row">
+      <span><strong>Typ:</strong> ${file.type}</span>
+      <span><strong>Klasse:</strong> ${file.kategorie ? displayName(file.kategorie) : '—'}</span>
+      ${file.size ? `<span><strong>Grösse:</strong> ${fmtSize(file.size)}</span>` : ''}
+    </div>
+    <div class="meta-row" style="margin-top:6px">
+      <span><strong>Pfad:</strong> ${esc(file.path)}</span>
+    </div>
+    <div style="margin-top:12px">
+      <a href="${file.rawUrl}" target="_blank" rel="noopener" style="font-size:.85rem">↗ Datei öffnen (raw)</a>
+    </div>`;
+  modalOverlay.classList.add('open');
+}
+
+// ── Repo laden ──
+loadBtn.addEventListener('click', loadRepo);
+repoInput.addEventListener('keydown', e => { if (e.key === 'Enter') loadRepo(); });
+
+async function loadRepo() {
+  const url = repoInput.value.trim();
+  const m = url.match(/github\.com\/([^\/]+)\/([^\/\.\s]+)/);
+  if (!m) { repoStatus.textContent = 'Ungültige GitHub-URL'; repoStatus.classList.add('err'); return; }
+  repoOwner = m[1]; repoName = m[2];
+  repoStatus.classList.remove('err');
+  repoStatus.textContent = 'Lade Dateibaum…';
+  loadBtn.disabled = true;
+
+  content.innerHTML = '<div class="state-msg"><div class="spinner"></div><p>Dateibaum wird geladen…</p></div>';
+
+  try {
+    const apiUrl = `https://api.github.com/repos/${repoOwner}/${repoName}/git/trees/HEAD?recursive=1`;
+    const res = await fetch(apiUrl);
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    const data = await res.json();
+    if (!data.tree) throw new Error('Kein Dateibaum erhalten');
+
+    allFiles = [];
+    for (const node of data.tree) {
+      if (node.type !== 'blob') continue;
+      const name = node.path.split('/').pop();
+      const ext = name.split('.').pop().toLowerCase();
+      if (!SUPPORTED_EXTS.includes(ext)) continue;
+
+      // Kategorie aus dem ersten Ordnernamen
+      const parts = node.path.split('/');
+      let kategorie = null;
+      for (const p of parts.slice(0, -1)) {
+        if (KATEGORIEN.includes(p)) { kategorie = p; break; }
+      }
+
+      const type = mediaType(name);
+      allFiles.push({
+        path: node.path,
+        name: name,
+        size: node.size || 0,
+        kategorie: kategorie,
+        type: type,
+        rawUrl: `https://raw.githubusercontent.com/${repoOwner}/${repoName}/HEAD/${encodeURIComponent(node.path).replace(/%2F/g, '/')}`
+      });
+    }
+
+    repoStatus.textContent = `${allFiles.length} Dateien gefunden`;
+    buildSidebar();
+    render();
+  } catch (err) {
+    repoStatus.textContent = 'Fehler: ' + err.message;
+    repoStatus.classList.add('err');
+    content.innerHTML = `<div class="state-msg"><div class="icon">⚠</div><p>${esc(err.message)}</p></div>`;
+  } finally {
+    loadBtn.disabled = false;
+  }
+}
+
+// ── Sidebar aufbauen ──
+function buildSidebar() {
+  const counts = { all:0, video:0, image:0, audio:0, text:0 };
+  const katCounts = {};
+  KATEGORIEN.forEach(k => katCounts[k] = 0);
+
+  for (const f of allFiles) {
+    counts.all++;
+    if (counts[f.type] !== undefined) counts[f.type]++;
+    if (f.kategorie && katCounts[f.kategorie] !== undefined) katCounts[f.kategorie]++;
+  }
+
+  const typeLabels = { all:'Alle', video:'Videos', image:'Bilder', audio:'Audio', text:'Texte' };
+  sbTypes.innerHTML = '';
+  for (const [key, label] of Object.entries(typeLabels)) {
+    const el = document.createElement('div');
+    el.className = 'sb-item' + (filterType === key && !filterKat ? ' active' : '');
+    el.innerHTML = `${label}<span class="cnt">${counts[key]}</span>`;
+    el.addEventListener('click', () => { filterType = key; filterKat = null; closeSidebar(); buildSidebar(); render(); });
+    sbTypes.appendChild(el);
+  }
+
+  sbKlassen.innerHTML = '';
+  for (const kat of KATEGORIEN) {
+    const el = document.createElement('div');
+    el.className = 'sb-item' + (filterKat === kat ? ' active' : '');
+    el.innerHTML = `${displayName(kat)}<span class="cnt">${katCounts[kat]}</span>`;
+    el.addEventListener('click', () => { filterKat = kat; filterType = 'all'; closeSidebar(); buildSidebar(); render(); });
+    sbKlassen.appendChild(el);
+  }
+}
+
+// ── Filtern ──
+function getFiltered() {
+  const q = searchInput.value.trim().toLowerCase();
+  return allFiles.filter(f => {
+    if (filterType !== 'all' && f.type !== filterType) return false;
+    if (filterKat && f.kategorie !== filterKat) return false;
+    if (q) {
+      const haystack = (f.name + ' ' + (f.kategorie || '')).toLowerCase();
+      if (!haystack.includes(q)) return false;
+    }
+    return true;
+  });
+}
+
+// ── Rendern ──
+function render() {
+  const filtered = getFiltered();
+
+  // Topbar-Filter-Anzeige
+  let filterLabel = '';
+  if (filterKat) filterLabel = displayName(filterKat);
+  else if (filterType !== 'all') filterLabel = { video:'Videos', image:'Bilder', audio:'Audio', text:'Texte' }[filterType];
+  topFilter.textContent = filterLabel;
+
+  // Breadcrumb
+  breadcrumb.innerHTML = `<strong>kepap</strong>${filterLabel ? ' › ' + filterLabel : ''}${searchInput.value.trim() ? ' › «' + esc(searchInput.value.trim()) + '»' : ''} — ${filtered.length} Ergebnis${filtered.length !== 1 ? 'se' : ''}`;
+
+  if (filtered.length === 0) {
+    content.innerHTML = '<div class="state-msg"><div class="icon">📂</div><p>Keine Dateien gefunden.</p></div>';
+    return;
+  }
+
+  if (viewMode === 'grid') renderGrid(filtered);
+  else renderList(filtered);
+}
+
+function renderGrid(files) {
+  let html = '<div class="grid">';
+  for (const f of files) {
+    const badgeClass = 'badge-' + f.type;
+    const badgeLabel = f.type === 'image' ? 'Bild' : f.type === 'video' ? 'Video' : f.type === 'audio' ? 'Audio' : 'Text';
+    let previewInner;
+    if (f.type === 'image') {
+      previewInner = `<img src="${f.rawUrl}" alt="${esc(f.name)}" loading="lazy">`;
+    } else {
+      const icons = { video:'▶', audio:'♫', text:'📄' };
+      previewInner = `<span class="icon-placeholder">${icons[f.type] || '?'}</span>`;
+    }
+    html += `
+      <div class="card" data-path="${esc(f.path)}">
+        <div class="card-preview">
+          ${previewInner}
+          <span class="card-badge ${badgeClass}">${badgeLabel}</span>
+        </div>
+        <div class="card-body">
+          <div class="card-name" title="${esc(f.name)}">${esc(f.name)}</div>
+          <div class="card-meta">
+            <span>${f.kategorie ? displayName(f.kategorie) : '—'}</span>
+            <span>${fmtSize(f.size)}</span>
+          </div>
+        </div>
+      </div>`;
+  }
+  html += '</div>';
+  content.innerHTML = html;
+  content.querySelectorAll('.card').forEach(card => {
+    card.addEventListener('click', () => {
+      const file = files.find(f => f.path === card.dataset.path);
+      if (file) openModal(file);
+    });
+  });
+}
+
+function renderList(files) {
+  let html = `<table class="list-table"><thead><tr>
+    <th>Typ</th><th>Dateiname</th><th>Klasse</th><th>Grösse</th>
+  </tr></thead><tbody>`;
+  for (const f of files) {
+    const badgeClass = 'badge-' + f.type;
+    const badgeLabel = f.type === 'image' ? 'Bild' : f.type === 'video' ? 'Video' : f.type === 'audio' ? 'Audio' : 'Text';
+    html += `<tr data-path="${esc(f.path)}">
+      <td><span class="type-badge ${badgeClass}">${badgeLabel}</span></td>
+      <td class="fname" title="${esc(f.name)}">${esc(f.name)}</td>
+      <td>${f.kategorie ? displayName(f.kategorie) : '—'}</td>
+      <td>${fmtSize(f.size)}</td>
+    </tr>`;
+  }
+  html += '</tbody></table>';
+  content.innerHTML = html;
+  content.querySelectorAll('tbody tr').forEach(row => {
+    row.addEventListener('click', () => {
+      const file = files.find(f => f.path === row.dataset.path);
+      if (file) openModal(file);
+    });
+  });
+}
+
+// ── Hilfsfunktionen ──
+function esc(s) { const d = document.createElement('div'); d.textContent = s; return d.innerHTML; }
+function fmtSize(bytes) {
+  if (!bytes) return '—';
+  if (bytes < 1024) return bytes + ' B';
+  if (bytes < 1048576) return (bytes / 1024).toFixed(1) + ' KB';
+  return (bytes / 1048576).toFixed(1) + ' MB';
+}
+
+// ── ERD-konforme In-Memory-Datenstruktur (Referenz) ──
+const DB = {
+  kategorie:       KATEGORIEN.map((k, i) => ({ kategorie_id: i + 1, kat_name: k })),
+  rollen:          [{rolle_id:1,rolle_name:'Admin'},{rolle_id:2,rolle_name:'Editor'},{rolle_id:3,rolle_name:'Viewer'},{rolle_id:4,rolle_name:'Uploader'}],
+  mitglieder:      [], // {mitglied_id, vor_name, nach_name, email}
+  user:            [], // {user_id, mitglied_id, user_name, passwort, created_at}
+  user_rollen:     [], // {user_id, rolle_id}
+  team:            [], // {team_id, team_name}
+  team_mitglieder: [], // {team_id, mitglied_id}
+  videos:          [], // {vid_id, user_id, kategorie_id, titel, beschreibung, laufzeit, views, hochgeladen_am}
+  bilder:          [], // {bild_id, vid_id, kategorie_id, dateipfad, beschreibung, laufzeit, hochgeladen_am}
+  audio:           []  // {audio_id, vid_id, dateipfad, beschreibung, hochgeladen_am}
+};
+
+// ── Eingebettete Testdaten ──
+const TEST_FILES = [
+  {path:'IFZK-2524-017-ABU/zusammenfassung.md',       name:'zusammenfassung.md',       size:120, kategorie:'IFZK-2524-017-ABU',        type:'text'},
+  {path:'IFZK-2524-017-ABU/notizen.txt',              name:'notizen.txt',              size:68,  kategorie:'IFZK-2524-017-ABU',        type:'text'},
+  {path:'IFZK-2524-017-ABU/logo-abu.svg',             name:'logo-abu.svg',             size:540, kategorie:'IFZK-2524-017-ABU',        type:'image'},
+  {path:'IFZK-2524-017-ABU/praesentation-cover.png',  name:'praesentation-cover.png',  size:4200,kategorie:'IFZK-2524-017-ABU',        type:'image'},
+  {path:'IFZK-2524-017-ABU/whiteboard-foto.jpg',      name:'whiteboard-foto.jpg',      size:8500,kategorie:'IFZK-2524-017-ABU',        type:'image'},
+  {path:'IFZK-2524-017-S2-UEK-106/aufgaben.json',     name:'aufgaben.json',            size:95,  kategorie:'IFZK-2524-017-S2-UEK-106', type:'text'},
+  {path:'IFZK-2524-017-S2-UEK-106/sql-cheatsheet.md', name:'sql-cheatsheet.md',        size:180, kategorie:'IFZK-2524-017-S2-UEK-106', type:'text'},
+  {path:'IFZK-2524-017-S2-UEK-106/erd-diagram.svg',   name:'erd-diagram.svg',          size:1100,kategorie:'IFZK-2524-017-S2-UEK-106', type:'image'},
+  {path:'IFZK-2524-017-S2-UEK-106/db-schema-screenshot.png', name:'db-schema-screenshot.png', size:5800, kategorie:'IFZK-2524-017-S2-UEK-106', type:'image'},
+  {path:'IFZK-2524-017-S2-UEK-106/klassendiagramm.jpg',name:'klassendiagramm.jpg',     size:6200,kategorie:'IFZK-2524-017-S2-UEK-106', type:'image'},
+  {path:'IFZK-2524-017-S2-MAT/formeln.csv',           name:'formeln.csv',              size:145, kategorie:'IFZK-2524-017-S2-MAT',     type:'text'},
+  {path:'IFZK-2524-017-S2-MAT/pruefungsstoff.md',     name:'pruefungsstoff.md',        size:65,  kategorie:'IFZK-2524-017-S2-MAT',     type:'text'},
+  {path:'IFZK-2524-017-S2-MAT/graph-parabel.png',     name:'graph-parabel.png',        size:3800,kategorie:'IFZK-2524-017-S2-MAT',     type:'image'},
+  {path:'IFZK-2524-017-S2-MAT/tafel-foto.jpg',        name:'tafel-foto.jpg',           size:7200,kategorie:'IFZK-2524-017-S2-MAT',     type:'image'},
+  {path:'IFZK-2524-017-S1-114/protokoll.txt',         name:'protokoll.txt',            size:72,  kategorie:'IFZK-2524-017-S1-114',     type:'text'},
+  {path:'IFZK-2524-017-S1-114/netzwerk-config.json',  name:'netzwerk-config.json',     size:82,  kategorie:'IFZK-2524-017-S1-114',     type:'text'},
+  {path:'IFZK-2524-017-S1-114/netzwerk-topologie.svg',name:'netzwerk-topologie.svg',   size:1350,kategorie:'IFZK-2524-017-S1-114',     type:'image'},
+  {path:'IFZK-2524-017-S1-114/ip-tabelle.png',        name:'ip-tabelle.png',           size:4100,kategorie:'IFZK-2524-017-S1-114',     type:'image'},
+  {path:'IFZK-2524-017-S1-114/rack-foto.jpg',         name:'rack-foto.jpg',            size:9100,kategorie:'IFZK-2524-017-S1-114',     type:'image'},
+  {path:'IFZK-2524-017-S1-OFF/stundenplan.md',        name:'stundenplan.md',           size:190, kategorie:'IFZK-2524-017-S1-OFF',     type:'text'},
+  {path:'IFZK-2524-017-S1-OFF/inventar.csv',          name:'inventar.csv',             size:105, kategorie:'IFZK-2524-017-S1-OFF',     type:'text'},
+  {path:'IFZK-2524-017-S1-OFF/organigramm.png',       name:'organigramm.png',          size:4600,kategorie:'IFZK-2524-017-S1-OFF',     type:'image'},
+  {path:'IFZK-2524-017-S1-OFF/team-foto.jpg',         name:'team-foto.jpg',            size:7800,kategorie:'IFZK-2524-017-S1-OFF',     type:'image'},
+];
+
+function loadTestData() {
+  const base = repoOwner && repoName
+    ? `https://raw.githubusercontent.com/${repoOwner}/${repoName}/HEAD/`
+    : '';
+  allFiles = TEST_FILES.map(f => ({
+    ...f,
+    rawUrl: base ? base + encodeURIComponent(f.path).replace(/%2F/g,'/') : '#'
+  }));
+  repoStatus.textContent = `Demo: ${allFiles.length} Testdateien geladen`;
+  repoStatus.classList.remove('err');
+  buildSidebar();
+  render();
+}
+
+// Demo-Button
+const demoBtn = document.createElement('button');
+demoBtn.textContent = 'Demo-Daten';
+demoBtn.style.cssText = 'padding:7px 14px;background:#16a34a;color:#fff;border-radius:var(--radius);font-weight:600;font-size:.88rem';
+demoBtn.addEventListener('click', loadTestData);
+document.querySelector('.repo-bar').appendChild(demoBtn);
+
+// ── Init ──
+buildSidebar();
+content.innerHTML = '<div class="state-msg"><div class="icon">🔗</div><p>Gib oben eine GitHub-Repo-URL ein und klicke «Laden», oder nutze «Demo-Daten» zum Testen.</p></div>';
+
+// Auto-load: try GitHub, fall back to test data
+(async () => {
+  if (repoInput.value.trim()) {
+    try { await loadRepo(); }
+    catch(e) { /* ignore */ }
+    if (allFiles.length === 0) loadTestData();
+  }
+})();
+</script>
+</body>
+</html>
